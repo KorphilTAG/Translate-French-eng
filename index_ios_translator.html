@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>iOS-Optimized Live FR → EN Translator (Mic + Camera)</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0f14" />
+<style>
+  :root { --bg:#0b0f14; --panel:#121822; --accent:#3aa0ff; --muted:#a7b0bd; --text:#e9eef5; --ok:#19c37d; --warn:#ffb020; --bad:#ff5d5d; }
+  * { box-sizing: border-box }
+  html,body{height:100%}
+  body{margin:0;background:linear-gradient(180deg,#0b0f14,#0d121a);color:var(--text);font:16px/1.4 -apple-system, BlinkMacSystemFont,"Segoe UI", Roboto, Helvetica, Arial}
+  header{padding:14px 18px;border-bottom:1px solid #172030;background:#0c121a;position:sticky;top:0;z-index:5}
+  header h1{margin:0;font-size:17px;letter-spacing:.2px}
+  main{display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:14px;padding:14px;max-width:1200px;margin:0 auto}
+  .card{background:var(--panel);border:1px solid #1b2432;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.25);overflow:hidden}
+  .card h2{margin:0;padding:10px 12px;border-bottom:1px solid #1b2432;font-size:14px;background:#121a26}
+  .inner{padding:12px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  label{font-size:13px;color:var(--muted)}
+  select,input,button,textarea{font:inherit}
+  select,input[type="text"],input[type="password"],input[type="url"]{background:#0e141d;color:var(--text);border:1px solid #1e2a3a;border-radius:11px;padding:10px 12px;outline:none;min-width:140px}
+  input[type="checkbox"]{transform:scale(1.05)}
+  button{background:var(--accent);color:#07101a;border:none;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer;touch-action:manipulation}
+  button.secondary{background:#1b2534;color:var(--text);border:1px solid #253144}
+  button.ghost{background:transparent;border:1px dashed #2a3a54;color:#a6b4c6}
+  button:disabled{opacity:.55;cursor:not-allowed}
+  small.hint{display:block;color:var(--muted);font-size:12px;margin-top:6px}
+  .status{font-size:12px;color:var(--muted)}
+  .pill{display:inline-block;padding:4px 8px;border-radius:999px;font-size:12px;border:1px solid #243246;color:#a6b4c6}
+  #videoWrap{position:relative;border-radius:14px;overflow:hidden;background:black}
+  #video{width:100%;display:block;opacity:.97;transform:translateZ(0)}
+  #overlay{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+  #overlayText{position:absolute;left:50%;bottom:20px;transform:translateX(-50%);max-width:min(92%,1100px);padding:10px 12px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.12);border-radius:12px;backdrop-filter:blur(6px);font-size:18px;line-height:1.35;white-space:pre-wrap;text-align:center}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .stack{display:flex;flex-direction:column;gap:8px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  textarea{width:100%;min-height:64px;resize:vertical;background:#0e141d;color:var(--text);border:1px solid #1e2a3a;border-radius:10px;padding:10px 12px}
+  footer{padding:10px 12px;color:#8fa2b8;font-size:12px}
+  @media (max-width:980px){ main{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<header><h1>iOS‑Optimized Live French → English (Mic + Camera)</h1></header>
+
+<main>
+  <section class="card">
+    <h2>Controls</h2>
+    <div class="inner stack">
+      <div class="row">
+        <label class="pill">Audio Input</label>
+        <select id="micSelect" title="On iPhone, pick AirPods in Control Center">
+          <option>Loading devices…</option>
+        </select>
+        <button id="refreshDevices" class="secondary">Refresh</button>
+      </div>
+
+      <div class="row">
+        <label class="pill">Speech</label>
+        <button id="startMic">Start Mic (Web Speech)</button>
+        <button id="stopMic" class="secondary" disabled>Stop</button>
+      </div>
+
+      <div class="row">
+        <label class="pill">Speech Fallback (Server STT)</label>
+        <button id="startStt" class="ghost">Start Server STT</button>
+        <button id="stopStt" class="secondary" disabled>Stop</button>
+      </div>
+
+      <div class="row">
+        <label class="pill">Camera</label>
+        <button id="startCam">Start Camera OCR</button>
+        <button id="stopCam" class="secondary" disabled>Stop</button>
+      </div>
+
+      <div class="row">
+        <label><input type="checkbox" id="voiceOut" checked /> Speak English output</label>
+        <label><input type="checkbox" id="showInterim" /> Show interim speech</label>
+        <label><input type="checkbox" id="autoPunct" checked /> Auto punctuation</label>
+      </div>
+
+      <details>
+        <summary>Settings · Translation API</summary>
+        <div class="stack">
+          <div class="row">
+            <label>Base URL</label>
+            <input id="apiBase" type="url" value="https://libretranslate.com" style="min-width:260px" />
+          </div>
+          <div class="row">
+            <label>Path</label>
+            <input id="apiPath" type="text" value="/translate" />
+            <label>API Key</label>
+            <input id="apiKey" type="password" placeholder="(optional)" />
+          </div>
+          <small class="hint">POST JSON: { q, source: "fr", target: "en", format: "text" } to &lt;base+path&gt;.</small>
+        </div>
+      </details>
+
+      <details>
+        <summary>Settings · Server STT Fallback</summary>
+        <div class="stack">
+          <div class="row">
+            <label>STT Endpoint</label>
+            <input id="sttUrl" type="url" placeholder="https://your-stt.example/v1/recognize" style="min-width:280px" />
+          </div>
+          <div class="row">
+            <label>Auth Header</label>
+            <input id="sttAuth" type="text" placeholder="Bearer xyz…" />
+          </div>
+          <div class="row">
+            <label>Chunk (ms)</label>
+            <input id="sttChunkMs" type="text" value="3000" style="width:90px" />
+            <label>Mime</label>
+            <input id="sttMime" type="text" value="" placeholder="(auto)" style="width:160px" />
+          </div>
+          <small class="hint">Sends short recordings repeatedly as multipart/form-data: { audio: Blob, language=fr }. Set endpoint to your Whisper/Deepgram/Azure/GCP proxy.</small>
+        </div>
+      </details>
+
+      <div class="row status">
+        <span id="micStatus">Mic: idle</span> ·
+        <span id="sttStatus">Server STT: idle</span> ·
+        <span id="camStatus">Camera: idle</span> ·
+        <span id="ocrStatus">OCR: paused</span>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <h2>Speech (FR → EN)</h2>
+          <div class="inner">
+            <label>Heard (FR)</label>
+            <textarea id="heard" readonly></textarea>
+            <label>Translated (EN)</label>
+            <textarea id="spoken" readonly></textarea>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Camera OCR (FR → EN)</h2>
+          <div class="inner">
+            <label>Detected Text (FR)</label>
+            <textarea id="ocrText" readonly></textarea>
+            <label>Translated (EN)</label>
+            <textarea id="ocrTrans" readonly></textarea>
+          </div>
+        </div>
+      </div>
+
+      <small class="hint">
+        iPhone tips: Add to Home Screen for full‑screen. Choose AirPods as the system input in Control Center. Use HTTPS (or localhost) for camera/mic.
+      </small>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Live View</h2>
+    <div class="inner">
+      <div id="videoWrap">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div id="overlayText" hidden>…</div>
+      </div>
+    </div>
+    <footer>OCR throttled to reduce battery; pauses when app is backgrounded.</footer>
+  </section>
+</main>
+
+<canvas id="work" width="960" height="540" hidden></canvas>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.5/dist/tesseract.min.js"></script>
+<script>
+(() => {
+  // --- iOS heuristics & helpers ---
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const prefersSIMD = WebAssembly && WebAssembly.validate ? true : true; // hint only
+
+  // DOM
+  const $ = (id)=>document.getElementById(id);
+  const micSelect = $('micSelect'), refreshBtn = $('refreshDevices');
+  const startMicBtn=$('startMic'), stopMicBtn=$('stopMic');
+  const startSttBtn=$('startStt'), stopSttBtn=$('stopStt');
+  const startCamBtn=$('startCam'), stopCamBtn=$('stopCam');
+  const voiceOut=$('voiceOut'), showInterim=$('showInterim'), autoPunct=$('autoPunct');
+  const apiBase=$('apiBase'), apiPath=$('apiPath'), apiKey=$('apiKey');
+  const sttUrl=$('sttUrl'), sttAuth=$('sttAuth'), sttChunkMs=$('sttChunkMs'), sttMime=$('sttMime');
+  const micStatus=$('micStatus'), sttStatus=$('sttStatus'), camStatus=$('camStatus'), ocrStatus=$('ocrStatus');
+  const heardTA=$('heard'), spokenTA=$('spoken'), ocrTextTA=$('ocrText'), ocrTransTA=$('ocrTrans');
+  const video=$('video'), overlay=$('overlay'), overlayText=$('overlayText'), work=$('work');
+
+  let overlayCtx = null;
+  let micStream=null, camStream=null;
+  let worker=null, loopRAF=null, lastOCR="", lastOcrTime=0;
+  let rec=null, recognizing=false, heardFinal="", heardInterim="";
+  let sttMediaRec=null, sttTimer=null;
+  let wakeLock=null;
+
+  // --- UX helpers ---
+  function setText(el, prefix, s){ el.textContent = prefix + s; }
+  function setMicStatus(s){ setText(micStatus, 'Mic: ', s); }
+  function setSttStatus(s){ setText(sttStatus, 'Server STT: ', s); }
+  function setCamStatus(s){ setText(camStatus, 'Camera: ', s); }
+  function setOCRStatus(s){ setText(ocrStatus, 'OCR: ', s); }
+  function speak(txt, lang='en-US'){
+    try{ const u=new SpeechSynthesisUtterance(txt); u.lang=lang; speechSynthesis.cancel(); speechSynthesis.speak(u);}catch{}
+  }
+  async function translateText(q, source='fr', target='en'){
+    const base=apiBase.value.replace(/\/+$/,''); const path=apiPath.value.startsWith('/')?apiPath.value:'/'+apiPath.value;
+    try{
+      const r=await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ q, source, target, format:'text', api_key: apiKey.value || undefined })
+      });
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const data=await r.json();
+      return data.translatedText || data.translation || data[0]?.translatedText || '';
+    }catch(e){ console.warn('translate error', e); return '';}
+  }
+
+  // --- Device list (note: iOS limits labels until permission granted) ---
+  async function listDevices(){
+    try{
+      const devs = await navigator.mediaDevices.enumerateDevices();
+      const inputs = devs.filter(d=>d.kind==='audioinput');
+      micSelect.innerHTML='';
+      if(inputs.length===0){ micSelect.innerHTML='<option>No microphones found</option>'; return; }
+      for(const d of inputs){
+        const opt=document.createElement('option');
+        opt.value=d.deviceId; opt.textContent=d.label || `Mic (${d.deviceId.slice(0,6)}…)`;
+        micSelect.appendChild(opt);
+        if(/airpods/i.test(d.label)) micSelect.value=d.deviceId;
+      }
+      if(isIOS){
+        // iOS note
+        const note=document.createElement('option');
+        note.disabled=true; note.textContent='(On iPhone, select AirPods in Control Center)';
+        micSelect.appendChild(note);
+      }
+    }catch(e){ console.warn(e); }
+  }
+  refreshBtn.addEventListener('click', listDevices);
+
+  async function primePermissions(){
+    try{
+      const s = await navigator.mediaDevices.getUserMedia({audio:true, video:false});
+      s.getTracks().forEach(t=>t.stop());
+    }catch{}
+  }
+
+  // --- Web Speech (best case; flaky on iOS) ---
+  function setupWebSpeech(){
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SR){ setMicStatus('unsupported; use Server STT'); startMicBtn.disabled=true; return; }
+    rec = new SR();
+    rec.lang='fr-FR'; rec.continuous=true; rec.interimResults=true;
+    try{ if(autoPunct.checked && 'autoPunctuation' in rec) rec.autoPunctuation=true; }catch{}
+    rec.onstart=()=>{ recognizing=true; setMicStatus('listening…'); };
+    rec.onerror=(e)=>{ setMicStatus('error: '+e.error); };
+    rec.onend =()=>{ recognizing=false; setMicStatus('stopped'); startMicBtn.disabled=false; stopMicBtn.disabled=true; };
+    let debounce=null;
+    rec.onresult=(ev)=>{
+      heardInterim='';
+      for(let i=ev.resultIndex;i<ev.results.length;i++){
+        const r=ev.results[i];
+        if(r.isFinal){ heardFinal += (heardFinal?' ':'') + r[0].transcript.trim(); }
+        else { heardInterim += r[0].transcript; }
+      }
+      heardTA.value = (heardFinal + (showInterim.checked && heardInterim ? ' '+heardInterim : '')).trim();
+      if(debounce) clearTimeout(debounce);
+      debounce = setTimeout(async()=>{
+        const t=heardFinal.trim(); if(!t) return;
+        const en=await translateText(t,'fr','en'); if(en){ spokenTA.value=en; if(voiceOut.checked) speak(en); }
+      }, 350);
+    };
+  }
+  function startMic(){
+    try{
+      heardFinal=''; heardInterim=''; heardTA.value=''; spokenTA.value='';
+      setMicStatus('starting…'); startMicBtn.disabled=true; stopMicBtn.disabled=false;
+      rec.start();
+    }catch(e){ setMicStatus('could not start'); console.warn(e); startMicBtn.disabled=false; stopMicBtn.disabled=true; }
+  }
+  function stopMic(){ try{ rec.stop(); }catch{} startMicBtn.disabled=false; stopMicBtn.disabled=true; }
+
+  // --- Server STT fallback (works on iOS) ---
+  function chooseAudioMime(){
+    const tryTypes = [
+      'audio/webm;codecs=opus', // best quality/size; not in Safari
+      'audio/webm',
+      'audio/mp4',              // Safari iOS 17+
+      'audio/aac'
+    ];
+    for(const t of tryTypes){
+      if(MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t;
+    }
+    return ''; // let browser decide
+  }
+
+  async function startServerStt(){
+    if(!sttUrl.value){ setSttStatus('set STT Endpoint first'); return; }
+    try{
+      const deviceId = micSelect.value;
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: deviceId && deviceId!=='default' ? { deviceId: { exact: deviceId } } : true });
+      const mime = sttMime.value || chooseAudioMime();
+      sttMediaRec = new MediaRecorder(micStream, mime ? { mimeType: mime } : undefined);
+      const chunkMs = Math.max(1000, parseInt(sttChunkMs.value||'3000',10));
+      heardTA.value=''; spokenTA.value=''; setSttStatus('listening…');
+      startSttBtn.disabled=true; stopSttBtn.disabled=false;
+
+      sttMediaRec.ondataavailable = async (e)=>{
+        if(!e.data || e.data.size===0) return;
+        try{
+          const form = new FormData();
+          form.append('audio', e.data, 'chunk.' + (mimeExtFrom(e.data.type) || 'bin'));
+          form.append('language', 'fr');
+          const res = await fetch(sttUrl.value, {
+            method: 'POST',
+            headers: sttAuth.value ? { 'Authorization': sttAuth.value } : undefined,
+            body: form
+          });
+          const json = await res.json();
+          const fr = json.text || json.transcript || '';
+          if(fr){
+            heardFinal += (heardFinal ? ' ' : '') + fr;
+            heardTA.value = heardFinal;
+            const en = await translateText(fr,'fr','en');
+            if(en){
+              spokenTA.value = (spokenTA.value ? spokenTA.value+'\n' : '') + en;
+              if(voiceOut.checked) speak(en);
+            }
+          }
+        }catch(err){ console.warn('STT send err', err); }
+      };
+      sttMediaRec.start(chunkMs);
+      // iOS: create pacing timer to request data
+      sttTimer = setInterval(()=>{ try{ sttMediaRec.requestData(); }catch{} }, chunkMs+200);
+    }catch(e){ console.warn(e); setSttStatus('permission denied or unsupported'); }
+  }
+  function mimeExtFrom(type){
+    if(!type) return '';
+    if(type.includes('webm')) return 'webm';
+    if(type.includes('mp4')) return 'm4a';
+    if(type.includes('aac')) return 'aac';
+    if(type.includes('ogg')) return 'ogg';
+    return 'bin';
+  }
+  function stopServerStt(){
+    try{ sttMediaRec && sttMediaRec.stop(); }catch{}
+    try{ if(sttTimer) clearInterval(sttTimer); sttTimer=null; }catch{}
+    if(micStream){ micStream.getTracks().forEach(t=>t.stop()); micStream=null; }
+    startSttBtn.disabled=false; stopSttBtn.disabled=true; setSttStatus('stopped');
+  }
+
+  // --- Camera + Tesseract OCR ---
+  async function startCam(){
+    try{
+      camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio:false });
+      video.srcObject = camStream; await video.play();
+      // size overlay
+      overlay.width = video.videoWidth || 1280;
+      overlay.height = video.videoHeight || 720;
+      overlayCtx = overlay.getContext('2d');
+      overlayText.hidden=false;
+      setCamStatus('running');
+      // wake lock to prevent dimming
+      try{ if('wakeLock' in navigator){ wakeLock = await navigator.wakeLock.request('screen'); } }catch{}
+      // tesseract worker (fra)
+      setOCRStatus('loading model…');
+      worker = await Tesseract.createWorker('fra');
+      setOCRStatus('ready');
+      // loop
+      runOCRLoop();
+    }catch(e){ console.warn(e); setCamStatus('permission denied or unavailable'); }
+  }
+  function stopCam(){
+    if(loopRAF){ cancelAnimationFrame(loopRAF); loopRAF=null; }
+    if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
+    if(worker){ worker.terminate(); worker=null; }
+    if(wakeLock){ try{ wakeLock.release(); }catch{} wakeLock=null; }
+    setCamStatus('stopped'); setOCRStatus('paused');
+    overlayCtx && overlayCtx.clearRect(0,0,overlay.width,overlay.height);
+    overlayText.hidden=true; ocrTextTA.value=''; ocrTransTA.value='';
+  }
+
+  async function runOCRLoop(){
+    const tick = async () => {
+      loopRAF = requestAnimationFrame(tick);
+      const now = performance.now();
+      if (document.hidden) return;           // pause when backgrounded
+      if (now - lastOcrTime < 1300) return;  // throttle for iOS battery/thermal
+      lastOcrTime = now;
+      try{
+        const w = Math.min(960, video.videoWidth || 960);
+        const h = Math.floor((w / (video.videoWidth||1)) * (video.videoHeight||1));
+        work.width=w; work.height=h;
+        const ctx = work.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(video, 0, 0, w, h);
+        setOCRStatus('reading…');
+        const res = await worker.recognize(work);
+        const fr = (res?.data?.text || '').trim();
+        if(fr && fr !== lastOCR){
+          lastOCR = fr;
+          ocrTextTA.value = fr;
+          const en = await translateText(fr,'fr','en');
+          ocrTransTA.value = en || '(translation unavailable)';
+          drawOverlay(en || '…');
+        }else{
+          drawOverlay('(no French text detected)');
+        }
+        setOCRStatus('ready');
+      }catch(e){ console.warn('OCR err', e); setOCRStatus('error'); }
+    };
+    tick();
+  }
+  function drawOverlay(txt){
+    if(!overlayCtx) return;
+    overlayCtx.clearRect(0,0,overlay.width,overlay.height);
+    overlayText.textContent = txt;
+  }
+
+  // --- Orientation / visibility handling ---
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.hidden && wakeLock){ try{ wakeLock.release(); }catch{} wakeLock=null; }
+  });
+  window.addEventListener('orientationchange', ()=>{
+    // Recompute overlay sizing after rotation
+    setTimeout(()=>{
+      overlay.width = video.videoWidth || overlay.width;
+      overlay.height= video.videoHeight || overlay.height;
+    }, 500);
+  }, { passive:true });
+
+  // --- Wire up ---
+  startMicBtn.addEventListener('click', startMic);
+  stopMicBtn.addEventListener('click', stopMic);
+  startSttBtn.addEventListener('click', startServerStt);
+  stopSttBtn.addEventListener('click', stopServerStt);
+  startCamBtn.addEventListener('click', startCam);
+  stopCamBtn.addEventListener('click', stopCam);
+
+  (async()=>{
+    await primePermissions();
+    await listDevices();
+    setupWebSpeech();
+  })();
+})();
+</script>
+</body>
+</html>
